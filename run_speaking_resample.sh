@@ -1,8 +1,8 @@
 hostname=`hostname`
-stage=0
+stage=-1
 stop_stage=1000
 # data-related
-corpus_dir="../corpus/speaking/GEPT_B1"
+corpus_dir="/share/nas167/teinhonglo/AcousticModel/spoken_test/corpus/speaking/GEPT_B1"
 #score_names="content pronunciation vocabulary"
 score_names="content"
 anno_fn="new_111年口說語料.xlsx"
@@ -13,26 +13,28 @@ test_on_valid="true"
 merge_below_b1="false"
 trans_type="trans_stt"
 do_round="true"
-n_resamples=100
+n_resamples=max # 100 or max
 # model-related
 model=pool          # auto
-exp_tag=bert-pool  # bert-model transformers=4.3.3, tokenizers=0.10.3
-model_path=bert-base-uncased # bert-base-uncased
+exp_tag=electra-base-discriminator  # bert-model transformers=4.3.3, tokenizers=0.10.3
+model_path=google/electra-base-discriminator # bert-base-uncased
 max_score=8
 max_seq_length=512
 score_loss="mse"
 # training-related
-warmup_steps=0  # 0
+warmup_steps=150  # 0
 weight_decay=0  # 0
-max_grad_norm=1.0   # 1.0
+max_grad_norm=10   # 1.0
 train_batch_size=8  # 8
 gradient_accumulation_steps=1  # 1
 num_epochs=6        # 6
 learning_rate=5e-5  # 5e-5
+eval_mode="final"
 # other
 rprefix=
-score_loss=mse
-extra_options=
+use_mlm="true"
+mlm_alpha=0.1   # when use mlm
+score_alpha=0.9 # when use mlm
 
 . ./path.sh
 . ./parse_options.sh
@@ -61,6 +63,10 @@ if [ "$merge_below_b1" == "true" ]; then
     data_dir=${data_dir}_bb1
     exp_root=${exp_root}_bb1
     runs_root=${runs_root}_bb1
+fi
+
+if [ "$use_mlm" == "true" ]; then
+    train_options="--use_mlm_objective --mlm_alpha $mlm_alpha --score_alpha $score_alpha"
 fi
 
 exp_root=${exp_root}
@@ -123,7 +129,7 @@ if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
                 echo "$new_exp_root/$model_args_dir/final is already existed."
                 continue
             fi
-            
+
             python3 run_speech_grader.py --do_train --save_best_on_evaluate --save_best_on_train \
                                          --do_lower_case --overwrite_cache\
                                          --model $model \
@@ -143,7 +149,7 @@ if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
                                          --score_name $sn \
                                          --data_dir $new_data_dir/$fd \
                                          --runs_root $new_runs_root \
-                                         --exp_root $new_exp_root
+                                         --exp_root $new_exp_root $train_options
         done
     done
 fi
@@ -160,7 +166,7 @@ if [ $stage -le 2 ] && [ $stop_stage -ge 2 ]; then
             
             output_dir=$exp_tag/${sn}/${fd}
             model_args_dir=$exp_tag/${sn}/${fd}
-            model_dir=$model_args_dir/best_train
+            model_dir=$model_args_dir/$eval_mode
             predictions_file="$new_runs_root/$output_dir/predictions.txt"
             
             python3 run_speech_grader.py --do_test --model $model \

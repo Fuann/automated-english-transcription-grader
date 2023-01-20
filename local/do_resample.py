@@ -20,7 +20,7 @@ parser.add_argument("--score",
  
 parser.add_argument("--n_resamples",
                     default="120",
-                    type=int)
+                    type=str)
 
 parser.add_argument("--tsv_fn",
                     default="train.tsv",
@@ -28,8 +28,15 @@ parser.add_argument("--tsv_fn",
 
 args = parser.parse_args()
 
-def do_resample(df, score="vocabulary", n_resamples=140, scales=[1,2,3,4,5,6,7,8], resample_scales=[1,2,4,6,8]):
+def do_resample(df, score="vocabulary", n_resamples="100", scales=[1,2,3,4,5,6,7,8], resample_scales=[1,2,4,6,8]):
     df_balanced = None
+
+    if n_resamples == "max":
+        n_resamples = max([ len(df.loc[df[score]==g]) for g in scales ])
+    elif n_resamples.is_decimal():
+        n_resamples = int(n_resamples)
+    else:
+        raise ValueError("Wrong argument of n_resamples: {}".format(n_resamples))
 
     for g in scales:
         sub_df = df.loc[df[score] == g]
@@ -72,7 +79,8 @@ data_dir = args.data_dir
 score = args.score
 n_resamples = args.n_resamples
 tsv_fn = args.tsv_fn
-resample_scales = [1,2,3,4,5,6,7,8]
+#resample_scales = [1,2,3,4,5,6,7,8]
+resample_scales = [1,2,4,6,8]
 
 tsv_path = os.path.join(data_dir, tsv_fn)
 df = pd.read_csv(tsv_path, sep='\t', dtype={"text_id":str})

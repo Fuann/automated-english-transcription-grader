@@ -54,12 +54,12 @@ class Trainer:
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.args.learning_rate, eps=self.args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=t_total)
 
-        self.args.logger.info("***** Running training *****")
-        self.args.logger.info("  Num examples = %d", len(train_data))
-        self.args.logger.info("  Num Epochs = %d", self.args.num_train_epochs)
-        self.args.logger.info("  Instantaneous batch size = %d", self.args.train_batch_size)
-        self.args.logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        self.args.logger.info("  Total optimization steps = %d", t_total)
+        print("***** Running training *****")
+        print("  Num examples = {}".format(len(train_data)))
+        print("  Num Epochs = {}".format(self.args.num_train_epochs))
+        print("  Instantaneous batch size = {}".format(self.args.train_batch_size))
+        print("  Gradient Accumulation steps = {}".format(self.args.gradient_accumulation_steps))
+        print("  Total optimization steps = {}".format(t_total))
 
         self.global_step = 0
         self.tr_loss, self.logging_loss = 0.0, 0.0
@@ -105,9 +105,9 @@ class Trainer:
         eval_sampler = SequentialSampler(self.eval_data)
         eval_dataloader = DataLoader(self.eval_data, sampler=eval_sampler, batch_size=self.args.eval_batch_size)
 
-        self.args.logger.info("***** Running evaluation {} *****".format(prefix))
-        self.args.logger.info("  Num examples = %d", len(self.eval_data))
-        self.args.logger.info("  Batch size = %d", self.args.eval_batch_size)
+        print("***** Running evaluation {} *****".format(prefix))
+        print("  Num examples = {}".format(len(self.eval_data)))
+        print("  Batch size = {}".format(self.args.eval_batch_size))
         nb_eval_steps = 0
         if verbose or self.args.predictions_file:
             all_score_predictions = torch.zeros(len(self.eval_data), device=self.args.device)
@@ -140,15 +140,16 @@ class Trainer:
             with io.open(self.args.predictions_file, 'w') as file:
                 predictions = '\n'.join(['{} | {}'.format(str(pred), str(target)) for pred, target in zip(all_score_predictions.cpu().tolist(), all_score_targets.cpu().tolist())])
                 file.write(predictions)
-                self.args.logger.info("Predictions stored at ".format(self.args.predictions_file))
+                print("Predictions stored at {}".format(self.args.predictions_file))
 
         # Computes the losses per objective and records + logs them.
         total_losses = {objective: loss / nb_eval_steps for objective, loss in total_losses.items()}
         if verbose:
             compute_metrics(total_losses, all_score_predictions, all_score_targets, self.args.device)
-        self.args.logger.info("***** Eval results {} *****".format(prefix))
+        print("***** Eval results {} *****".format(prefix))
         for key in sorted(total_losses.keys()):
-            self.args.logger.info("  %s = %s", key, str(total_losses[key]))
+            #self.args.logger.info("  %s = %s", key, str(total_losses[key]))
+            print("  {} = {}".format(key, str(total_losses[key])))
         if verbose and writer:
             header_row = 'Predicted score | Actual score\n---|---\n'
             table_rows = ['{} | {}'.format(pred, target) for pred, target in
@@ -261,4 +262,4 @@ class Trainer:
             torch.save(self.grader.state_dict(), os.path.join(output_dir, 'pool.model'))
             self.grader.encoder.save_pretrained(output_dir)
             self.bert_tokenizer.save_pretrained(output_dir)
-        self.args.logger.info("Saving model checkpoint to %s", output_dir)
+        print("Saving model checkpoint to %s", output_dir)
