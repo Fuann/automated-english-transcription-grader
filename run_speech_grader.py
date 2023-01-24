@@ -20,7 +20,7 @@ pretrained_lms = ['auto', 'deberta']
 
 
 def get_auxiliary_objectives(args, vocab_size):
-    training_objectives = {'score': (1, args.score_alpha)}
+    training_objectives = {'score': (args.num_labels, args.score_alpha)}
     total_weighting = args.score_alpha
     for obj in aux_objs:
         alpha = getattr(args, '{}_alpha'.format(obj))
@@ -34,7 +34,6 @@ def get_auxiliary_objectives(args, vocab_size):
                 num_predictions = len(getattr(data, 'get_{}_labels'.format(obj))())
             training_objectives[obj] = (num_predictions, alpha)
             total_weighting += alpha
-
     
     if total_weighting != 1.0:
         logger.info('Weighting values for objectives must add up to 1, total was {}'.format(total_weighting))
@@ -54,6 +53,8 @@ def main():
                         help="Pre-trained BERT model to extend e.g. bert-base-uncased.")
     parser.add_argument("--model", default=None, type=str,
                         help="Type of speech grader model: ['lstm', 'bert']")
+    parser.add_argument("--problem_type", default="regression", type=str,
+                        choices=['regression', 'classification'])
     parser.add_argument("--max_score", default=6, type=float,
                          help="Maximum score that an example can be awarded (the default value used is 6, inline with CEFR levels).")
     parser.add_argument('--special_tokens', default=[], type=str, action='append',
@@ -76,6 +77,7 @@ def main():
                         help="Save best model based on evaluation scoring loss.")
     parser.add_argument('--save_best_on_train', action='store_true',
                         help="Save best model based on train scoring loss.")
+    parser.add_argument('--save_best_on_accuracy', action='store_true')
     parser.add_argument("--save_all_checkpoints", action='store_true',
                        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
 
@@ -131,6 +133,14 @@ def main():
     args = parser.parse_args()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # NOTE: for classification
+    if args.problem_type == 'regression':
+        args.num_labels = 1
+    elif args.problem_type == 'classification':
+        args.num_labels = int(args.max_score)
+    else:
+        raise ValueError("no problem type {}".format(problem_type))
+
     if args.save_best_on_evaluate and not args.evaluate_during_training:
         args.logger.info('Cannot save best model if not evaluating')
         return
@@ -157,10 +167,10 @@ def main():
             grader = lstm_model.SpeechGraderModel(args, vocab, training_objectives).to(args.device)
             train_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, vocab=vocab, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, vocab=vocab, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             dev_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, vocab=vocab, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, vocab=vocab, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(args, grader, training_objectives)
         elif args.model == 'bert':
             tokenizer = BertTokenizer.from_pretrained(args.model_path, additional_special_tokens=args.special_tokens, use_fast=False, do_lower_case=args.do_lower_case)
@@ -171,10 +181,10 @@ def main():
             grader = bert_model.SpeechGraderModel(config=config).to(args.device)
             train_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             dev_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(args, grader, training_objectives, bert_tokenizer=tokenizer)
         elif args.model in pretrained_lms:
             tokenizer = AutoTokenizer.from_pretrained(args.model_path, additional_special_tokens=args.special_tokens, use_fast=False, do_lower_case=args.do_lower_case)
@@ -185,10 +195,10 @@ def main():
             grader = auto_model.SpeechGraderModel(config=config).to(args.device)
             train_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             dev_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(args, grader, training_objectives, bert_tokenizer=tokenizer)
         elif args.model == 'pool':
             tokenizer = AutoTokenizer.from_pretrained(args.model_path, additional_special_tokens=args.special_tokens, use_fast=False, do_lower_case=args.do_lower_case)
@@ -199,10 +209,10 @@ def main():
             grader = auto_model.SpeechGraderPoolModel(config=config).to(args.device)
             train_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             dev_data = data.load_and_cache_examples(
                 args.model, args.data_dir, args.max_seq_length, args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, evaluate=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(args, grader, training_objectives, bert_tokenizer=tokenizer)
         else:
             args.logger.info("--model must be either 'lstm' or 'bert' or 'auto'")
@@ -226,7 +236,7 @@ def main():
             grader.load_state_dict(torch.load(os.path.join(args.exp_root, args.model_dir, 'lstm.model')))
             test_data = data.load_and_cache_examples(
                 train_args.model, args.data_dir, train_args.max_seq_length, train_args.special_tokens,
-                logger, args.score_name, vocab=vocab, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, vocab=vocab, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(train_args, grader, training_objectives)
 
         elif train_args.model == "bert":
@@ -236,7 +246,7 @@ def main():
             grader = bert_model.SpeechGraderModel.from_pretrained(os.path.join(args.exp_root, args.model_dir), config=config).to(args.device)
             test_data = data.load_and_cache_examples(
                 train_args.model, args.data_dir, train_args.max_seq_length, train_args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(train_args, grader, training_objectives, bert_tokenizer=tokenizer)
         elif train_args.model in pretrained_lms:
             tokenizer = AutoTokenizer.from_pretrained(os.path.join(args.exp_root, args.model_dir), do_lower_case=args.do_lower_case)
@@ -245,7 +255,7 @@ def main():
             grader = auto_model.SpeechGraderModel.from_pretrained(os.path.join(args.exp_root, args.model_dir), config=config).to(args.device)
             test_data = data.load_and_cache_examples(
                 train_args.model, args.data_dir, train_args.max_seq_length, train_args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(train_args, grader, training_objectives, bert_tokenizer=tokenizer)
         else:
             tokenizer = AutoTokenizer.from_pretrained(os.path.join(args.exp_root, args.model_dir), do_lower_case=args.do_lower_case)
@@ -256,7 +266,7 @@ def main():
             grader.encoder.from_pretrained(os.path.join(args.exp_root, args.model_dir), config=config).to(args.device)
             test_data = data.load_and_cache_examples(
                 train_args.model, args.data_dir, train_args.max_seq_length, train_args.special_tokens,
-                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize)
+                logger, args.score_name, tokenizer=tokenizer, test=True, reload=args.overwrite_cache, pretokenize=args.pretokenize, problem_type=args.problem_type)
             trainer = train.Trainer(train_args, grader, training_objectives, bert_tokenizer=tokenizer)
         
         trainer.test(test_data)

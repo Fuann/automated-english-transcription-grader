@@ -22,9 +22,12 @@ def get_losses(training_objectives, training_objective_predictions, labels, devi
     """
     losses = {'overall': torch.tensor([0.], device=device)}
     for objective, prediction in training_objective_predictions.items():
-        _, alpha = training_objectives[objective]
-        # Scoring objective uses MSE loss and all other objectives use CrossEntropy loss
-        if objective == 'score':
+        num_labels, alpha = training_objectives[objective]
+        # Scoring objective uses MSE or CrossEntropy loss depends on the labels 
+        # Other objectives use CrossEntropy loss
+        if objective == 'score' and num_labels == 1:
+            # NOTE: B x 1 to B
+            prediction = prediction.squeeze()
             if score_loss == "mse":
                 criterion = nn.MSELoss().to(device)
             elif score_loss == "rmse":
@@ -45,6 +48,9 @@ def get_losses(training_objectives, training_objective_predictions, labels, devi
                 criterion = centroid_loss
         else:
             criterion = nn.CrossEntropyLoss(ignore_index=-1).to(device)
+            if objective == 'score':
+                # label range: 1-8 to 0-7 for loss calculating
+                labels[objective] = labels[objective] - 1
 
         batch_labels = labels[objective].reshape(-1)
 

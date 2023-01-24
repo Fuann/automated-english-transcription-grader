@@ -66,6 +66,7 @@ class Trainer:
         self.grader.zero_grad()
         self.best_valid_loss = float('inf')
         self.best_train_loss = float('inf')
+        self.best_valid_acc = 0.0
         train_iterator = trange(int(self.args.num_train_epochs), desc="Epoch", disable=False)
 
         try:
@@ -119,14 +120,21 @@ class Trainer:
             if i == len(eval_dataloader):
                 end = len(self.eval_data)
 
-            #self.grader.eval()
             inputs, labels = self._get_inputs_and_labels(batch, eval=True)
             self.grader.eval()
             with torch.no_grad():
                 predictions = self.grader(inputs)
 
             if verbose or self.args.predictions_file:
-                all_score_predictions[start:end] = predictions['score'].detach()
+                # NOTE: for classification
+                num_labels, _ = self.training_objectives['score']
+                if num_labels != 1:
+                    score_predictions = torch.argmax(
+                        torch.softmax(predictions['score'], dim=1), dim=1
+                    ) + 1
+                else:
+                    score_predictions = predictions['score'].squeeze()
+                all_score_predictions[start:end] = score_predictions.detach()
                 all_score_targets[start:end] = labels['score'].detach()
             for objective, loss in get_losses(self.training_objectives, predictions, labels, self.args.device, self.args.score_loss).items():
                 if total_losses.get(objective, None):
@@ -234,12 +242,16 @@ class Trainer:
                             self.best_train_loss = train_loss
                             self._save_model('best_train')
                     
+                    if self.args.save_best_on_accuracy:
+                        if results['within_0.5'] > self.best_valid_acc:
+                            self.best_valid_acc = results['within_0.5']
+                            self._save_model('best_acc') 
+                    
                     if self.args.save_best_on_evaluate:
                         if results['score'] >= self.best_valid_loss:
                             return
                         self.best_valid_loss = results['score']
-                        self._save_model('best')
-                    
+                        self._save_model('best')  
 
                 tb_writer.add_scalar('lr', scheduler.get_last_lr()[0], self.global_step)
                 tb_writer.add_scalar('train_loss', train_loss, self.global_step)
@@ -262,4 +274,4 @@ class Trainer:
             torch.save(self.grader.state_dict(), os.path.join(output_dir, 'pool.model'))
             self.grader.encoder.save_pretrained(output_dir)
             self.bert_tokenizer.save_pretrained(output_dir)
-        print("Saving model checkpoint to %s", output_dir)
+        print("Saving model checkpoint to {}".format(output_dir))

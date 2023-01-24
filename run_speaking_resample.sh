@@ -16,8 +16,9 @@ do_round="true"
 n_resamples=max # 100 or max
 # model-related
 model=pool          # auto
-exp_tag=electra-base-discriminator  # bert-model transformers=4.3.3, tokenizers=0.10.3
+exp_tag=electra-base-discriminator-classification  # bert-model transformers=4.3.3, tokenizers=0.10.3
 model_path=google/electra-base-discriminator # bert-base-uncased
+problem_type='classification'
 max_score=8
 max_seq_length=512
 score_loss="mse"
@@ -29,12 +30,13 @@ train_batch_size=8  # 8
 gradient_accumulation_steps=1  # 1
 num_epochs=6        # 6
 learning_rate=5e-5  # 5e-5
-eval_mode="final"
+eval_mode="best"
 # other
-rprefix=
+rprefix=a
 use_mlm="true"
-mlm_alpha=0.1   # when use mlm
-score_alpha=0.9 # when use mlm
+mlm_alpha=0.05   # when use mlm
+score_alpha=0.95 # when use mlm
+train_options=
 
 . ./path.sh
 . ./parse_options.sh
@@ -131,9 +133,11 @@ if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
             fi
 
             python3 run_speech_grader.py --do_train --save_best_on_evaluate --save_best_on_train \
+                                         --save_best_on_accuracy \
                                          --do_lower_case --overwrite_cache\
                                          --model $model \
                                          --model_path $model_path \
+                                         --problem_type $problem_type \
                                          --num_train_epochs $num_epochs \
                                          --weight_decay $weight_decay \
                                          --max_grad_norm $max_grad_norm \
@@ -172,6 +176,7 @@ if [ $stage -le 2 ] && [ $stop_stage -ge 2 ]; then
             python3 run_speech_grader.py --do_test --model $model \
                                          --do_lower_case \
                                          --model_path $model_path \
+                                         --problem_type $problem_type \
                                          --model_args_dir $model_args_dir \
                                          --max_seq_length $max_seq_length \
                                          --max_score $max_score \

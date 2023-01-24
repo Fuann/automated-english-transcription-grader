@@ -197,7 +197,7 @@ class SimplePredictionHead(nn.Module):
         return outputs
 
 class SpeechGraderPoolModel(nn.Module):
-    def __init__(self, config, num_classes=1, mode="mean"):
+    def __init__(self, config, mode="mean"):
         super(SpeechGraderPoolModel,self).__init__()
 
         config.hidden_dropout = 0.
@@ -259,7 +259,17 @@ class SpeechGraderPoolModel(nn.Module):
             #decoded_objective = self.score_scaler(decoded_objective) if objective == 'score' else decoded_objective
             #decoded_objective = score_scaler(decoded_objective, slope=1, x_shift=0, y_shift=0, max_score=self.max_score, trainable=False) \
             #    if objective == 'score' else decoded_objective
+
+            # score: Batch x N-class
+            # mlm : Batch x dim x T
             training_objective_predictions[objective] = decoded_objective.view(-1, decoded_objective.shape[2]) \
-                if objective != 'score' else decoded_objective.squeeze()
+                if objective != 'score' else decoded_objective
+            
+            # NOTE: output predictions when in eval mode for classification
+            #if not self.training and training_objective_predictions['score'].shape[-1] != 1:
+            #    logits = training_objective_predictions['score']
+            #    training_objective_predictions['score'] = torch.argmax(
+            #        torch.softmax(logits.detach().clone(), dim=1), dim=1
+            #    ) + 1
 
         return training_objective_predictions

@@ -254,7 +254,7 @@ def load_and_cache_vocab(data_dir, logger, score_name):
     pickle.dump(vocab_to_int, open(vocab_file, 'wb'))
     return vocab_to_int
 
-def load_and_cache_examples(model, data_dir, max_seq_length, special_tokens, logger, score_name, vocab=None, tokenizer=None, evaluate=False, test=False, reload=False, pretokenize=False):
+def load_and_cache_examples(model, data_dir, max_seq_length, special_tokens, logger, score_name, vocab=None, tokenizer=None, evaluate=False, test=False, reload=False, pretokenize=False, problem_type='regression'):
     assert not (evaluate and test), "Cannot load validation data and test data at the same time."
     processor = TSVProcessor(score_name)
     # Load data features from cache or dataset file
@@ -288,7 +288,9 @@ def load_and_cache_examples(model, data_dir, max_seq_length, special_tokens, log
     all_pos_tags = torch.tensor([f.pos_tags for f in features], dtype=torch.long)
     all_dep_rels = torch.tensor([f.dep_rels for f in features], dtype=torch.long)
     all_native_languages = torch.tensor([f.native_language for f in features], dtype=torch.long)
-    all_scores = torch.tensor([f.score for f in features], dtype=torch.float)
+    # NOTE: for classifcation change label to long
+    dtype = torch.long if problem_type == 'classification' else torch.float
+    all_scores = torch.tensor([f.score for f in features], dtype=dtype)
 
     if model == 'lstm':
         return TensorDataset(all_input_ids, all_input_mask, all_scores, all_pos_tags, all_dep_rels, all_native_languages)
